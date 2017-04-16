@@ -1,8 +1,7 @@
 import SuperCompiler
 import Data.Tree
 
-infixr 6 ->>
-(->>) = Lambda
+l = Lambda
 infix 6 |<
 (|<)  = Pattern
 infixr 6 >|
@@ -23,45 +22,42 @@ infixl 9 |@
 infixl 7 @|
 (@|) e1 e2 = Application e1 e2
 
-
-
-
-n = Name
 v = Variable
 
 def = FunDef
 prog = Program
 
-sum' = def "sum" $
-        "a" ->> 
-        "b" ->> 
-        v "a" >| [
-            "Zero" |< []        ->- v "b",
-            "Succ" |< [n "a\'"] ->- "Succ" <| ["sum" |@ v "a\'" @@ v "b"]
+sum' = def "sum" $ 
+        l $
+        l $
+        v 1 >| [
+            "Z" |< 0 ->- v 0,
+            "S" |< 1 ->- (l $ "S" <| ["sum" |@ v 0 @@ v 1])
         ]
 
 prod' = def "prod" $
-        "a" ->> 
-        "b" ->>
-        v "a" >| [
-            "Zero" |< []        ->- "Zero" <| [],
-            "Succ" |< [n "a\'"] ->- "sum" |@ v "b" @| "prod" |@ v "a\'" @@ v "b"
+        l $
+        l $ 
+        v 1 >| [
+            "Z" |< 0 ->- "Z" <| [],
+            "S" |< 1 ->- (l $ "sum" |@ v 1 @| "prod" |@ v 0 @@ v 1)
         ]
 
 fact' = def "fact" $
-        "n" ->>
-        v "n" >| [
-            "Zero" |< []        ->- "Succ" +| "Zero",
-            "Succ" |< [n "n\'"] ->- "prod" |@ v "n" @| "fact" |@ v "n"
+        l $
+        v 0 >| [
+            "Z" |< 0 ->- "S" +| "Z",
+            "S" |< 1 ->- (l $ "prod" |@ v 1 @| "fact" |@ v 0)
         ]
 
-v1 = v "n"
-v2 = "Succ" +++ "Succ" +++ "Succ" +++ "Succ" +| "Zero"
-v3 = "Succ" +| "Zero"
-v4 = "Zero" <| []
+v1 = v 0
+v2 = "S" +++ "S" +++ "S" +++ "S" +| "Z"
+v3 = "S" +| "Z"
+v4 = "Z" <| []
 
-p1 = prog [sum', prod', fact'] $ "fact" |@ v2
-p2 = prog [sum'] $ "sum" |@ v4 @@ v4
+p1 = prog [sum', prod', fact'] $ "fact" |@ v1
+p2 = prog [sum'] $ "sum" |@ v2 @@ v2
 
-main = putStrLn $ take 10000 $ drawTree $ pretty' $ build p1
+main = writeFile "res.txt" $ take 10000 $ drawTree $ pretty' $ build p1
+--main = putStrLn $ take 100000 $ drawTree $ pretty' $ build p2
 --main = putStrLn $ take 10000 $ drawTree $ pretty' $ buildExpr [sum', prod', fact'] empty $ "prod" |@ v1 @@ v3
