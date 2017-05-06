@@ -37,7 +37,7 @@ sum' = def "sum" $
 
 prod' = def "prod" $
         l $
-        l $ 
+        l $
         v 1 >| [
             "Z" |< 0 ->- "Z" <| [],
             "S" |< 1 ->- (l $ "sum" |@ v 1 @| "prod" |@ v 0 @@ v 1)
@@ -51,13 +51,16 @@ fact' = def "fact" $
         ]
 
 v1 = v 0
-v2 = "S" +++ "S" +++ "S" +++ "S" +| "Z"
+v2 = "S" +++ "S" +++ "S" +| "Z"
 v3 = "S" +| "Z"
 v4 = "Z" <| []
 
-p1 = prog [sum', prod', fact'] $ "fact" |@ v1
-p2 = prog [sum'] $ "sum" |@ v2 @@ v2
+p1 = prog [sum', prod', fact'] $ l $ "fact" |@ v1
+p2 = prog [sum', prod'] $ l $ "prod" |@ v1 @@ v4
+p3 = prog [sum', prod'] $ "prod" |@ v1 @| v2
 
-main = writeFile "res.txt" $ take 10000 $ drawTree $ pretty' $ build p1
+main = writeFile "res.txt" $ take 1000000 $ drawTree $ pretty'' $ buildG p3
+--main = writeFile "res.txt" $ take 100000 $ drawTree $ pretty'' $ buildG p2
+--main = writeFile "res.txt" $ take 10000 $ drawTree $ pretty'' $ buildG p1
 --main = putStrLn $ take 100000 $ drawTree $ pretty' $ build p2
 --main = putStrLn $ take 10000 $ drawTree $ pretty' $ buildExpr [sum', prod', fact'] empty $ "prod" |@ v1 @@ v3
