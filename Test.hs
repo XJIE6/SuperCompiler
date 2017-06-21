@@ -65,24 +65,21 @@ v3 = "S" +| "Z"
 v4 = "Z" <| []
 
 -- OK TESTS --
+p0 = prog [sum', prod', fact'] $ l $ "prod" |@ v1 @@ v2
 p1 = prog [sum', prod', fact'] $ l $ "fact" |@ v1
 p2 = prog [sum', prod'] $ l $ "sum" |@ v1 @@ v2
 p3 = prog [sum', prod'] $ l $ "sum" |@ v2 @@ v1
 p4 = prog [sum', prod'] $ l $ "prod" |@ v1 @@ v2
 p5 = prog [sum', prod'] $ l $ "prod" |@ v2 @@ v1
-p6 = prog [sum', prod', pow'] $ l $ "pow" |@ v2 @| v1
+p6 = prog [sum', prod', pow'] $ l $ "pow" |@ v1 @| v2
 p7 = prog [sum', prod', pow'] $ l $ "sum" |@ v2 @| ("sum" |@ v1 @| v2)
 p8 = prog [sum', prod', pow'] $ l $ "sum" |@ v2 @| ("prod" |@ v1 @| v2)
-
--- INFINITE TESTS --
-p9 = prog [sum', prod'] $ "sum" |@ v1 @| v1
+p9 = prog [sum', prod', pow'] $ "pow" |@ v1 @| v1
 p10 = prog [sum', prod', pow'] $ l $ "pow" |@ v1 @| v2
 p11 = prog [sum', prod', pow'] $ l $ "prod" |@ v2 @| ("prod" |@ v1 @| v2)
-
--- WRONG TESTS --
 p12 = prog [sum', prod', pow'] $ l $ "prod" |@ v2 @| ("sum" |@ v1 @| v2)
 
 -- To get program --
-main = writeFile "res.txt" $ show $ buildP p1
+main = writeFile "res.txt" $ show $ buildP p11
 -- To build graph --
---main = writeFile "res.txt" $ take 100000 $ drawTree $ pretty'' $ buildG p5
+--main = writeFile "res.txt" $ take 100000 $ drawTree $ pretty'' $ buildG p0

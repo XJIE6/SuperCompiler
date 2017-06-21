@@ -66,14 +66,14 @@ goUp i e (x@(Lambda _):xs) = (intoMatch i e x) : goUp (i + 1) e xs
 goUp i e (x:xs)            = (intoMatch i e x) : goUp i e xs
 
 intoMatch :: Int -> Expr -> Expr -> Expr
-intoMatch _ _ u@(Unfold _ _ _) = u
-intoMatch n new v@(Variable i) = if n == i then new else v
-intoMatch n new (Lambda b)     = Lambda $ into (n + 1) (shift 1 new) b
-intoMatch n new e              = fmap'' (intoMatch n new) e
+intoMatch _ _ u@(Unfold _ _ _) = trace ("FAIL HERE \n" ++ show u) $ u  --Strange line, but works)
+intoMatch n new v@(Variable i) = trace (show new ++ " " ++ show n) $ if n == i then trace ("OK") $ new else trace ("NO") $v
+intoMatch n new l@(Lambda b)   = let res = Lambda $ into (n + 1) (shift 1 new) b in trace (show res) $ res
+intoMatch n new e              = let res = fmap'' (intoMatch n new) e in trace (show res) $ res
 
 match :: Expr -> [Expr] -> (Pattern, Expr) -> Maybe (Pattern, Expr, [Expr])
 match e1 g (Var, e2)                           = error ("think") --Just (Application e2 e1, g)
-match (Variable i) g (p@(Pattern n j), e2)         = let new = Constructor n $ map (\x -> Unfold n x $ Variable i) [0..(j - 1)] in Just (p, intoMatch i new e2, goUp i new g)
+match (Variable i) g (p@(Pattern n j), e2)         = let new = Constructor n $ map (\x -> Unfold n x $ Variable i) [0..(j - 1)] in trace ("##########\n" ++ show p ++ "\n" ++ show e2 ++ "\n" ++ show new ++ "\n" ++ show i ++ "\n" ++ show (intoMatch i new e2) ++ "\n##########\n") $ Just (p, intoMatch i new e2, goUp i new g)
 match c@(Constructor n1 p) g (p'@(Pattern n2 i), e) = if n1 /= n2 then Nothing else 
                                                   if length p /= i then error ("different params number" ++ (show $ (Constructor n1 p)) ++ (show $ (Pattern n2 i, e))) else Just (p', e, g)
 match _ g (p, e)                               = Just (p, e, g)
@@ -97,6 +97,11 @@ beta i e2 e = shift (-1) $ into i (shift 1 e2) e
 
 --needy h g = Node' h g . Transient
 needy _ _ = id
+
+splitCase :: [Expr] -> Maybe (([Expr], [(Pattern, Expr)]), [Expr])
+splitCase [] = Nothing
+splitCase ((Case _ l):xs) = Just ((xs, l), [])
+splitCase (x:xs) = fmap (fmap $ (:) x) $ splitCase xs
 
 buildExpr :: [FunDef] -> [Expr] -> Expr -> Node' Expr
 
@@ -134,9 +139,9 @@ buildExpr f g h@(Constructor n p)             = case g of
                                                             Nothing     -> needy h g $ buildExpr f xs $ context (Counted h) x
                                                             Just (e, l) -> needy h g $ buildExpr f ((Constructor n l):g) e
 
-buildExpr f g h@(Case e p)                    = case g of 
-                                                (Case _ l):xs -> needy h g $ buildExpr f xs $ Case e $ map (\(p, e) -> (p, Case e l)) p
-                                                _ -> case e of 
+buildExpr f g h@(Case e p)                    = case splitCase g of 
+                                                Just ((xs, l), cas) -> needy h g $ buildExpr f xs $ Case e $ map (\(p, e) -> (p, Case (put' e cas) l)) p
+                                                Nothing -> case e of 
                                                         (Counted e) -> let res = catMaybes $ map (match e g) p in
                                                                             case length res of
                                                                                 0 -> Node' h g Stop
@@ -150,7 +155,7 @@ buildExpr f g h@(Call n)                      = Node' h g $ Transient $ buildExp
 
 buildExpr f g h@(Counted e)                   = needy h g $ buildExpr f g e
 
-buildExpr f g h@(Let l e)                     = Node' h g $ Decompose $ (buildExpr f g e) : (map (buildExpr f g) l)
+buildExpr f g h@(Let l e)                     = trace ("OPA\n" ++ show e ++ "\n" ++ show g) Node' h g $ Decompose $ (buildExpr f g e) : (map (buildExpr f g) l)
 
 buildExpr f g h@(Unfold n i e)                = case e of
                                                     (Counted e') -> case e' of 
@@ -164,75 +169,87 @@ buildExpr f g h@(Unfold n i e)                = case e of
 data Node'' a = Node'' Int a [a] (Step (Node'' a)) deriving (Show)
 
 exactMatch :: Int -> Expr -> Expr -> Maybe [(Int, Expr)]
-exactMatch n (Variable i) e                          = Just [(i - n, e)]
-exactMatch n (Unfold s j (Variable i)) e             = Just [(i - n, Constructor s $ (take (j - 1) $ repeat empty) ++ [e])]
-exactMatch n (Lambda e1) (Lambda e2)                 = exactMatch (n + 1) e1 e2
-exactMatch n (Application e1 e2) (Application e3 e4) = (++) <$> exactMatch n e1 e3 <*> exactMatch n e2 e4
-exactMatch n (Call s1) (Call s2)                     = if s1 == s2 then Just [] else Nothing
-exactMatch n (Constructor s1 l1) (Constructor s2 l2) = if s1 == s2 then foldr (\a b -> (++) <$> a <*> b) (Just []) $ zipWith (exactMatch n) l1 l2 else Nothing
-exactMatch _ _ _                                     = Nothing
+exactMatch n (Variable i) e                          = trace ("vvv") $ Just [(i - n, e)]
+exactMatch n (Unfold s j (Variable i)) e             = trace ("uuu") $ Just [(i - n, Constructor s $ (take (j - 1) $ repeat empty) ++ [e])]
+exactMatch n (Lambda e1) (Lambda e2)                 = trace ("lll") $ exactMatch (n + 1) e1 e2
+exactMatch n (Application e1 e2) (Application e3 e4) = trace ("aaa") $ (++) <$> exactMatch n e1 e3 <*> exactMatch n e2 e4
+exactMatch n (Call s1) (Call s2)                     = trace ("fff") $ if s1 == s2 then Just [] else Nothing
+exactMatch n (Constructor s1 l1) (Constructor s2 l2) = trace ("ccc") $ if s1 == s2 then foldr (\a b -> (++) <$> a <*> b) (Just []) $ zipWith (exactMatch n) l1 l2 else Nothing
+exactMatch _ _ _                                     = trace ("nnn") $ Nothing
+
+strongExactMatch' :: Int -> Int -> Expr -> Expr -> Maybe (([(Int, Expr)], [(Int, Expr)], Int, Bool), Expr)
+strongExactMatch' i n l@(Lambda e1) e2 = case strongExactMatch i n e1 e2 of
+                                            Just x -> Just x
+                                            Nothing -> strongExactMatch i n l e2
+strongExactMatch' i n e1 e2 = strongExactMatch i n e1 e2
 
 strongExactMatch :: Int -> Int -> Expr -> Expr -> Maybe (([(Int, Expr)], [(Int, Expr)], Int, Bool), Expr)
-strongExactMatch i n (Lambda e1) (Lambda e2)                 = fmap (fmap Lambda) $ strongExactMatch i (n + 1) e1 e2
-strongExactMatch i n (Application e1 e2) (Application e3 e4) = case (strongExactMatch i n e1 e3) of
+strongExactMatch i n (Lambda e1) (Lambda e2)                 = trace ("lll") $ fmap (fmap Lambda) $ strongExactMatch i (n + 1) e1 e2
+strongExactMatch i n (Application e1 e2) (Application e3 e4) = trace ("aaa") $ case (strongExactMatch i n e1 e3) of
                                                                 Just ((l1, l2, i', b), e) -> case strongExactMatch i' n e2 e4 of
                                                                                             Just ((l1', l2', i'', b'), e') -> Just ((l1 ++ l1', l2 ++ l2', i'', b), Application e e')
                                                                                             Nothing -> Nothing
                                                                 _ -> Nothing
-strongExactMatch i n (Call s1) (Call s2)                     = if s1 == s2 then Just (([], [], 0, True), Call s1) else Nothing
+strongExactMatch i n (Call s1) (Call s2)                     = trace ("ccc") $ if s1 == s2 then Just (([], [], i, True), Call s1) else Nothing
 --strongExactMatch n (Constructor s1 l1) (Constructor s2 l2) = if s1 == s2 then foldr (\a b -> (++) <$> a <*> b) (Just []) $ zipWith (exactMatch n) l1 l2 else Nothing
-strongExactMatch i n e1 e2                                   = Just (([(i + n, e1)], [(i + n, e2)], 1, False), Variable $ i + n)
+strongExactMatch i n e1 e2                                   = trace ("eee") $ Just (([(i + n, e1)], [(i + n, e2)], i + 1, False), Variable $ i + n)
 
-dummyMatch' :: Expr -> Expr -> Maybe [(Int, Expr)]
-dummyMatch' l@(Lambda e1) e2 = case exactMatch 0 l e2 of
+dummyMatch' :: Expr -> Expr -> Maybe [Expr]
+dummyMatch' e1 e2 = case dummyMatch'' e1 e2 of
+                    Nothing -> Nothing
+                    Just res -> trace ("NORMALIZE") $ normalise res
+
+
+dummyMatch'' :: Expr -> Expr -> Maybe [(Int, Expr)]
+dummyMatch'' l@(Lambda e1) e2 = trace ("ll") $ case exactMatch 0 l e2 of
                                 Just l  -> Just l
-                                Nothing -> dummyMatch' e1 e2
-dummyMatch' e1 e2            = exactMatch 0 e1 e2
+                                Nothing -> dummyMatch'' e1 e2
+dummyMatch'' e1 e2            = trace ("ee") $ exactMatch 0 e1 e2
 
 weakMatch' e1 e2 = weakMatch'' 0 e1 e2
 
 weakMatch'' :: Int -> Expr -> Expr -> Maybe (Expr, Expr)
-weakMatch'' i e1 l@(Lambda e2)         = case dummyMatch' e1 l of
+weakMatch'' i e1 l@(Lambda e2)         = trace ("l") $ case dummyMatch' e1 l of
                                         Just _  -> Just (l, empty')
                                         Nothing -> fmap (fmap Lambda) $ weakMatch'' (i + 1) e1 e2
-weakMatch'' i e1 a@(Application e2 e3) = case dummyMatch' e1 a of
+weakMatch'' i e1 a@(Application e2 e3) = trace ("a") $ case dummyMatch' e1 a of
                                         Just _  -> Just (a, empty')
                                         Nothing -> case (weakMatch' e1 e2, weakMatch'' i e1 e3) of
                                                         (Just p1, Just p2) -> error ("That is incredible!")
                                                         (Just p1, Nothing) -> Just $ fmap (\x -> Application x e3) p1
                                                         (Nothing, Just p2) -> Just $ fmap (Application e2) p2
                                                         _                  -> Nothing
-weakMatch'' i e1 c@(Constructor n l)   = case dummyMatch' e1 c of 
+weakMatch'' i e1 c@(Constructor n l)   = trace ("c") $ case dummyMatch' e1 c of 
                                         Just _  -> Just (c, empty')
                                         Nothing -> foldr (\(y, i) x -> x <|> fmap (fmap (\z -> Constructor n $ take i l ++ [z] ++ drop (i + 1) l)) (weakMatch'' i e1 y)) Nothing $ zip l [0..]
-weakMatch'' i e1 e2                    = case dummyMatch' e1 e2 of 
+weakMatch'' i e1 e2                    = trace ("e") $ case dummyMatch' e1 e2 of 
                                         Just _  -> Just (e2, empty') 
                                         Nothing -> Nothing
 
-strongMatchSubexpr :: Expr -> Expr -> Maybe (([(Int, Expr)], [(Int, Expr)], Int, Bool), Expr)
-strongMatchSubexpr e1 l@(Lambda e2)         = case strongExactMatch 0 0 e1 l of
-                                            Just x -> Just x
-                                            Nothing -> strongMatchSubexpr e1 e2
-strongMatchSubexpr e1 a@(Application e2 e3) = case strongExactMatch 0 0 e1 a of
-                                            Just x -> Just x
-                                            Nothing -> strongMatchSubexpr e1 e2 <|> strongMatchSubexpr e1 e3
-strongMatchSubexpr e1 c@(Constructor n l) = case strongExactMatch 0 0 e1 c of
-                                            Just x -> Just x
-                                            Nothing -> foldr (\e2 x -> x <|> strongMatchSubexpr e1 e2) Nothing l
-strongMatchSubexpr e1 e2 = case strongExactMatch 0 0 e1 e2 of
-                                            Just x -> Just x
-                                            Nothing -> Nothing
+strongMatchSubexpr :: Expr -> Expr -> Maybe (Expr, (([(Int, Expr)], [(Int, Expr)], Int, Bool), Expr))
+strongMatchSubexpr e1 l@(Lambda e2)         = trace("l") $ case strongExactMatch' 0 0 e1 l of
+                                            Just x@((_, _, _, b), _) | b == True -> Just (e1, x)
+                                            _ -> strongMatchSubexpr e1 e2
+strongMatchSubexpr e1 a@(Application e2 e3) = trace("a") $ case strongExactMatch' 0 0 e1 a of
+                                            Just x@((_, _, _, b), _) | b == True ->  trace(show e1 ++ "\n" ++ show a) $ Just (e1, x)
+                                            _ -> strongMatchSubexpr e1 e2 <|> strongMatchSubexpr e1 e3
+strongMatchSubexpr e1 c@(Constructor n l) = trace("c") $ case strongExactMatch' 0 0 e1 c of
+                                            Just x@((_, _, _, b), _) | b == True -> Just (e1, x)
+                                            _ -> foldr (\e2 x -> x <|> strongMatchSubexpr e1 e2) Nothing l
+strongMatchSubexpr e1 e2 = trace("e") $ case strongExactMatch' 0 0 e1 e2 of
+                                            Just x@((_, _, _, b), _) | b == True -> Just (e1, x)
+                                            _ -> Nothing
 
 apply n f x = if n == 0 then x else apply (n - 1) f (f x)
 
-strongMatch :: Node' Expr -> Node'' Expr -> Maybe (Int, Expr)
-strongMatch (Node' e' g' _) x@(Node'' i e g _) = case strongMatchSubexpr (put' e g) (put' e' g') of
-                                                    Just ((_, _, j, b), y) | b == True -> Just (i, apply j Lambda y)
-                                                    _ -> Nothing
+strongMatch :: Node' Expr -> Node'' Expr -> Maybe (Expr, Int, Expr)
+strongMatch (Node' e' g' _) x@(Node'' i e g _) = trace ("TRY HARD\n" ++ show (put' e g) ++ "\n" ++ show (put' e' g') ++ "\n") $ case strongMatchSubexpr (put' e g) (put' e' g') of
+                                                    Just (e, ((_, _, j, b), y)) | b == True -> Just (e, i, apply j Lambda y)
+                                                    _ -> trace("nop") $ Nothing
 
 weakMatch :: Node' Expr -> Node'' Expr -> Maybe (Expr, Expr)
-weakMatch (Node' e' g' _) x@(Node'' i e g _) = weakMatch' (put' e g) (put' e' g')
-dummyMatch :: Node' Expr -> Node'' Expr -> Maybe (Node'' Expr, [(Int, Expr)])
+weakMatch (Node' e' g' _) x@(Node'' i e g _) = trace ("TRY WEAK\n" ++ show (put' e g) ++ "\n" ++ show (put' e' g') ++ "\n") $ weakMatch' (put' e g) (put' e' g')
+dummyMatch :: Node' Expr -> Node'' Expr -> Maybe (Node'' Expr, [Expr])
 dummyMatch (Node' e' g' _) x@(Node'' i e g _) = fmap (\y -> (x, y)) $ dummyMatch' (put' e g) (put' e' g')
 
 return' :: Expr -> [Expr] -> Step (Node'' Expr) -> State Int (Node'' Expr)
@@ -267,16 +284,16 @@ buildGraph f ns node@(Node' e g (Transient node')) =
                                                     trace ("Trans " ++ (show $ put' e g) ++ "\n") $
                                                     let ok = catMaybes $ map (dummyMatch node) ns in
                                                     trace (show ok) $
-                                                    case catMaybes $ map (\(n, l) -> (\x -> (n, x)) <$> normalise l) $ ok of
+                                                    case ok of
                                                         (a, b):xs -> trace ("dummy ok\n") $ do
                                                                         i <- get
                                                                         return $ Right $ Node'' i e g $ Fold a b
                                                         []   -> trace ("dummy fail\n") $ case catMaybes $ map (weakMatch node) ns of
                                                                 (e', c):xs -> trace ("weak ok\n" ++ (show $ put' e g) ++ "\n" ++ show e' ++ "\n" ++ show c ++ "\n END \n") $ buildGraph f ns $ buildExpr f [] $ Let [e'] $ intoEmpty 0 (shift 1 c)
                                                                 []        -> trace ("weak fail\n") $ case catMaybes $ map (strongMatch node) ns of
-                                                                                (j, e'):xs -> trace ("strong ok\n") $do
+                                                                                (ee, j, e'):xs -> trace ("strong ok\n") $do
                                                                                                 i <- get
-                                                                                                trace ("OOOPS " ++ show e' ++ "\n") $ return $ Left (j, e')
+                                                                                                trace ("OOOPS " ++ show (put' e g) ++ "\n" ++ show e' ++ "\n" ++ (show $ strongMatch node $ head $ filter (\(Node'' i _ _ _) -> i == j) ns) ++ "\n" ++ show ee ++ "\n") $ return $ Left (j, e')
                                                                                                 --error (show j ++ " " ++ show e')
                                                                                                 
                                                                                 _ -> trace ("strong fail\n") $ do
@@ -287,9 +304,9 @@ buildGraph f ns node@(Node' e g (Transient node')) =
                                                                                         Left (i', e') | i > i'  -> return $ Left (i', e')
                                                                                         Left (i', e') | i < i'  -> return $ error $ show (i', e') --let Node' e' g' _ = node' in error (show $ put' e g)
                                                                                         Left (i', e')           -> case dummyMatch' e' (put' e g) of
-                                                                                                                    Just l  -> do {
+                                                                                                                    Just l  -> trace ("INFO\n" ++ show e' ++ "\n" ++ show (put' e g) ++ "\n" ++ show l ++ "\n") $ do {
                                                                                                                                 put i;
-                                                                                                                                buildGraph f ns $ buildExpr f [] $ Let (map snd l) e'}
+                                                                                                                                buildGraph f ns $ buildExpr f [] $ Let l e'}
                                                                                                                     Nothing -> error ("wtf") -- error (show e' ++ "\n" ++ (show $ put' e g))
                                                                                         Right (node)            -> return $ Right $ Node'' i e g $ Transient node
 
@@ -366,7 +383,7 @@ buildG p@(Program l e) = case evalState (buildGraph l [] (build p)) 0 of
 buildP::Program -> Program
 buildP p = case length $ take 1000000 $ drawTree $ pretty''$ buildG p of
                 1000000 -> error $ "infinite"
-                _ -> let (res, (_, _, funs)) = runState (buildProgram $ buildG p) (["a", "b", "c"], [], []) in Program funs $ discount res
+                _ -> let (res, (_, _, funs)) = runState (buildProgram $ buildG p) (["a", "b", "c", "d", "e", "f"], [], []) in Program funs $ discount res
 
 put' e []     = e
 put' e (x:xs) = put' (context e x) xs
